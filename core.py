@@ -5,6 +5,7 @@ Inclui: instrução, registradores, estações de reserva, ROB, preditor de desv
 """
 
 import re
+from typing import Optional, Union, Tuple
 
 class Instruction:
     """Representa uma instrução MIPS simplificada."""
@@ -55,7 +56,7 @@ class Instruction:
             else:
                 self.imm = '0'
                 self.rs = None
-        elif self.opcode == 'BNE':
+        elif self.opcode in {'BNE', 'BEQ'}:
             # BNE rs, rt, label
             self.rs, self.rt, self.target = tokens[1:4]
         elif self.opcode == 'BNEZ':
@@ -122,21 +123,21 @@ class RegisterFile:
 class ReservationStation:
     """Estação de reserva genérica."""
     def __init__(self, name, op_type):
-        self.name = name
-        self.op_type = op_type  # 'ADD', 'MUL', 'LOAD', 'STORE', 'BRANCH'
-        self.busy = False
-        self.op = None
-        self.Vj = None
-        self.Vk = None
-        self.Qj = None
-        self.Qk = None
-        self.dest = None  # Tag do ROB
-        self.instr = None
-        self.exec_cycles = 0
-        self.remaining = 0
-        self.ready = False
-        self.result = None
-        self.rob_idx = None
+        self.name: str = name
+        self.op_type: str = op_type  # 'ADD', 'MUL', 'LOAD', 'STORE', 'BRANCH'
+        self.busy: bool = False
+        self.op: Optional[str] = None
+        self.Vj: Optional[Union[int, float]] = None
+        self.Vk: Optional[Union[int, float]] = None
+        self.Qj: Optional[int] = None
+        self.Qk: Optional[int] = None
+        self.dest: Optional[int] = None  # Tag do ROB
+        self.instr: Optional[Instruction] = None
+        self.exec_cycles: int = 0
+        self.remaining: int = 0
+        self.ready: bool = False
+        self.result: Optional[Union[int, float]] = None
+        self.rob_idx: Optional[int] = None
 
     def clear(self):
         self.busy = False
@@ -161,45 +162,72 @@ class ReservationStation:
 
 class ROBEntry:
     """Entrada do buffer de reordenação (ROB)."""
-    def __init__(self, idx, instr, dest):
-        self.idx = idx
-        self.instr = instr
-        self.dest = dest  # registrador destino ou endereço
-        self.value = None
-        self.ready = False
-        self.state = 'ISSUE'  # ISSUE, EXEC, WB, COMMIT
-        self.mispredicted = False  # Para branch
+    def __init__(self, idx: int, instr: Instruction, dest: Optional[str]):
+        self.idx: int = idx
+        self.instr: Instruction = instr
+        self.dest: Optional[str] = dest  # registrador destino
+        self.ready: bool = False
+        self.state: str = 'ISSUE'  # ISSUE, EXEC, WB, COMMIT
+
+        # Campos de valor específicos por tipo de instrução
+        self.result: Optional[Union[int, float]] = None      # Para ADD, LD, etc.
+        self.store_value: Optional[Union[int, float]] = None # Para SD
+        self.branch_outcome: Optional[Tuple[bool, Optional[int]]] = None # Para BNE (taken, target_pc)
+
+        # Para LD/SD: cálculo de endereço
+        self.address: Optional[int] = None # Endereço de memória (para LD/SD)
+        self.address_ready: bool = False # Flag que indica se o endereço foi calculado
+
+        # Para desvios
+        self.mispredicted: bool = False  # Para branch
 
     def __repr__(self):
-        return (f"ROB{self.idx}: {self.instr} dest={self.dest} val={self.value} "
+        val_str = ""
+        if self.result is not None:
+            val_str = f"res={self.result}"
+        elif self.store_value is not None:
+            val_str = f"store_val={self.store_value}"
+        elif self.branch_outcome is not None:
+            val_str = f"branch={self.branch_outcome[0]},{self.branch_outcome[1]}"
+        
+        return (f"ROB{self.idx}: {self.instr} dest={self.dest} {val_str} "
                 f"ready={self.ready} state={self.state}")
 
 class ReorderBuffer:
     """Buffer de reordenação (ROB)."""
     def __init__(self, size):
-        self.entries = []
+        self.entries: list[ROBEntry] = []
         self.size = size
-        self.head = 0
-        self.tail = 0
-        self.count = 0
+        self.next_id = 0
 
     def is_full(self):
-        return self.count >= self.size
+        return len(self.entries) >= self.size
 
-    def add(self, entry):
+    def get_next_id(self):
+        """Retorna um ID único para a próxima entrada do ROB."""
+        id_ = self.next_id
+        # O ID pode dar a volta, assumindo que nunca haverá mais de 2*size entradas em voo
+        self.next_id = (self.next_id + 1) % (self.size * 2)
+        return id_
+
+    def add(self, entry: ROBEntry):
         if self.is_full():
             raise Exception('ROB cheio')
         self.entries.append(entry)
-        self.count += 1
         return entry.idx
 
     def remove(self):
         if self.entries:
             self.entries.pop(0)
-            self.count -= 1
 
-    def __getitem__(self, idx):
-        return self.entries[idx]
+    def __getitem__(self, idx: int) -> Optional[ROBEntry]:
+        """Busca uma entrada do ROB pelo seu ID estável."""
+        if idx is None:
+            return None
+        for entry in self.entries:
+            if entry.idx == idx:
+                return entry
+        return None # Retorna None se não encontrar (pode ter sido flush)
 
     def __len__(self):
         return len(self.entries)
@@ -208,6 +236,9 @@ class ReorderBuffer:
         if not self.entries:
             return 'ROB vazio.'
         return '\n'.join(str(e) for e in self.entries)
+
+    def clear(self):
+        self.entries.clear()
 
 class BranchPredictor:
     """Preditor de desvio simples (sempre não desvia)."""

@@ -1,6 +1,51 @@
-# Exemplo: Especulação de desvio condicional (branch)
-LW R1, 0(R2)        # R1 = Mem[R2]
-BEQ R1, R0, FIM     # Se R1 == 0, desvia para FIM (branch especulativo)
-ADD R3, R1, R4      # Pode ser especulativamente emitido
-MUL R5, R3, R6      # Também pode ser especulativo
-FIM: SUB R7, R5, R8 # Instrução de destino do branch 
+# Exemplo Didático: Previsão de Desvio Correta vs. Incorreta
+#
+# Premissa da Arquitetura: O preditor de desvio sempre aposta
+# que um desvio condicional (branch) NÃO será tomado.
+#
+# Este exemplo demonstra os dois cenários possíveis.
+
+# --- Setup Inicial ---
+# Prepara valores nos registradores para os testes.
+ADDI R1, R0, 100    # R1 = 100
+ADDI R2, R0, 100    # R2 = 100
+ADDI R3, R0, 10     # R3 = 10
+
+# --- Cenário 1: Previsão CORRETA (Desvio NÃO é tomado) ---
+# A instrução BNE (Branch if Not Equal) verifica se R1 != R2.
+# Neste momento, R1 (100) == R2 (100), então a condição é FALSA.
+# O desvio para "ALVO_ERRADO" NÃO será tomado.
+# A previsão do processador ("não tomar") estava CORRETA.
+BNE R1, R2, ALVO_ERRADO
+
+# Como a previsão estava certa, o processador continua executando
+# especulativamente as instruções abaixo, e elas serão confirmadas (commit).
+ADD R4, R3, R3      # R4 = 10 + 10 = 20. Esta instrução é válida.
+MUL R5, R4, R3      # R5 = 20 * 10 = 200. Esta instrução também é válida.
+
+
+# --- Cenário 2: Previsão INCORRETA (Desvio É tomado) ---
+# Agora, vamos mudar o valor de R2 para forçar que o desvio seja tomado.
+ADDI R2, R0, 50     # R2 = 50.
+
+# A mesma instrução BNE agora encontra uma condição VERDADEIRA.
+# R1 (100) != R2 (50).
+# O desvio para "ALVO_CERTO" SERÁ TOMADO.
+# A previsão do processador ("não tomar") estava ERRADA.
+BNE R1, R2, ALVO_CERTO
+
+# O processador, especulando errado, emitirá esta instrução abaixo.
+# Ela NUNCA deve ser finalizada.
+# Observe no Log de Eventos: ela será descartada (FLUSH) do pipeline.
+SUB R6, R0, R0      # Instrução no caminho especulativo errado.
+
+
+# O caminho que nunca deveria ser tomado no primeiro desvio.
+# Se a execução chegar aqui, há um erro na lógica do primeiro BNE.
+ALVO_ERRADO:
+ADDI R9, R0, 999    # R9 será 999 se algo der muito errado.
+
+# O caminho correto para o segundo desvio. A execução deve pular para cá.
+ALVO_CERTO:
+SUB R7, R5, R3      # R7 = 200 - 10 = 190. Usa os valores corretos do Cenário 1.
+HLT                 # Fim do programa. 

@@ -65,12 +65,12 @@ class TomasuloGUI:
         self.rs_legend.pack(anchor="w", padx=2, pady=(0,2))
 
         # Treeview para ROB
-        self.tree_rob = ttk.Treeview(lf_rob, columns=("ID", "Instr", "Dest", "Valor", "Pronto", "Estado"), show="headings", height=16)
-        for col, w in zip(["ID", "Instr", "Dest", "Valor", "Pronto", "Estado"], [40, 260, 60, 90, 70, 80]):
+        self.tree_rob = ttk.Treeview(lf_rob, columns=("ID", "Instr", "Dest/Addr", "Valor", "Pronto", "Estado"), show="headings", height=16)
+        for col, w in zip(["ID", "Instr", "Dest/Addr", "Valor", "Pronto", "Estado"], [40, 260, 80, 90, 70, 80]):
             self.tree_rob.heading(col, text=col)
             self.tree_rob.column(col, width=w, anchor="center")
         self.tree_rob.pack(fill="both", expand=True, padx=2, pady=2)
-        self.rob_legend = tk.Label(lf_rob, text="Legenda: ID = Entrada | Instr = Instrução | Dest = Destino | Valor = Resultado | Pronto = WB | Estado = Estágio", font=("Arial", 10), bg="#f4f6fa", fg="#555")
+        self.rob_legend = tk.Label(lf_rob, text="Legenda: ID = Entrada | Dest/Addr = Destino/Endereço | Pronto = WB | Estado = Estágio", font=("Arial", 10), bg="#f4f6fa", fg="#555")
         self.rob_legend.pack(anchor="w", padx=2, pady=(0,2))
 
         # Treeview para Registradores
@@ -86,6 +86,12 @@ class TomasuloGUI:
         # Separador
         sep2 = tk.Frame(self.root, height=2, bg="#b0b8c9")
         sep2.pack(fill="x", padx=0, pady=8)
+
+        # Log de Eventos
+        lf_log = tk.LabelFrame(self.root, text="Log de Eventos do Ciclo", font=self.title_font, bg="#f4f6fa", fg="#2a3a5e", labelanchor='n')
+        lf_log.pack(fill="x", expand=False, padx=12, pady=0)
+        self.text_log = tk.Text(lf_log, height=6, font=self.mono_font, bg="#fafdff", state="disabled", borderwidth=2, relief="groove", wrap="word")
+        self.text_log.pack(fill="x", expand=True, padx=4, pady=4)
 
         # Métricas (barra inferior)
         frame_metrics = tk.Frame(self.root, bg="#eaf2e3")
@@ -130,8 +136,8 @@ class TomasuloGUI:
                     executing_rs.add(uf['rs'])
         for rs in self.sim.reservation_stations:
             color = "#e0e7ef" if rs.busy else "#fafdff"
-            stage = rs.instr.opcode if rs.busy and rs.instr else "-"
-            values = [rs.name, rs.op or '-', str(rs.Vj)[:9], str(rs.Vk)[:9], str(rs.Qj)[:4], str(rs.Qk)[:4], str(rs.dest)[:4], str(rs.instr)[:40] if rs.instr else '-']
+            stage = (rs.instr.opcode or "-") if rs.busy and rs.instr else "-"
+            values = [rs.name, rs.op or '-', str(rs.Vj)[:9], str(rs.Vk)[:9], str(rs.Qj or '-')[:4], str(rs.Qk or '-')[:4], str(rs.dest or '-')[:4], str(rs.instr)[:40] if rs.instr else '-']
             tags = (stage,)
             if rs in executing_rs:
                 tags = ("EXECUTING",)
@@ -148,14 +154,28 @@ class TomasuloGUI:
         for i in self.tree_rob.get_children():
             self.tree_rob.delete(i)
         for entry in self.sim.rob.entries:
-            color = "#fafdff"
-            if entry.state == 'EXEC':
-                color = "#d0f0ff"
-            elif entry.state == 'WB':
-                color = "#e0ffe0"
-            elif entry.state == 'COMMIT':
-                color = "#fff0d0"
-            values = [entry.idx, str(entry.instr)[:28], str(entry.dest)[:5], str(entry.value)[:9], str(entry.ready), entry.state]
+            dest_addr = "-"
+            if entry.instr.opcode in ('LD', 'SD'):
+                if entry.address_ready and entry.address is not None:
+                    dest_addr = f"0x{int(entry.address):X}"
+                else:
+                    dest_addr = "(calc...)"
+            else:
+                dest_addr = str(entry.dest or '-')
+            
+            # Formata o valor de maneira mais limpa, usando os campos corretos
+            value_str = "-"
+            if entry.ready:
+                if entry.result is not None:
+                    value_str = f"{entry.result:.2f}" if isinstance(entry.result, float) else str(entry.result)
+                elif entry.store_value is not None:
+                    value_str = f"val: {entry.store_value}"
+                elif entry.branch_outcome is not None:
+                    value_str = "desvio"
+                else:
+                    value_str = "pronto"
+
+            values = [entry.idx, str(entry.instr)[:28], dest_addr, value_str, "Sim" if entry.ready else "Não", entry.state]
             self.tree_rob.insert('', 'end', values=values, tags=(entry.state,))
         self.tree_rob.tag_configure('EXEC', background="#d0f0ff")
         self.tree_rob.tag_configure('WB', background="#e0ffe0")
@@ -175,6 +195,17 @@ class TomasuloGUI:
                 self.tree_regs.insert('', 'end', values=(k, f"{v:.2f}"), tags=('fp',))
         self.tree_regs.tag_configure('int', background="#fafdff")
         self.tree_regs.tag_configure('fp', background="#fafdff")
+
+        # Atualiza Log de Eventos
+        state = self.sim.get_state()
+        log_entries = state.get('LOG', [])
+        self.text_log.config(state="normal")
+        self.text_log.delete('1.0', tk.END)
+        if log_entries:
+            self.text_log.insert(tk.END, "\n".join(log_entries))
+        else:
+            self.text_log.insert(tk.END, "Aguardando início da simulação...")
+        self.text_log.config(state="disabled")
 
         # Atualizar métricas automaticamente
         metrics = self.sim.get_metrics()
