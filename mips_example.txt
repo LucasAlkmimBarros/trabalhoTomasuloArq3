@@ -1,0 +1,11 @@
+# Exemplo simples de instrucoes MIPS para o simulador Tomasulo
+# Apenas: add, sub, mul, lw, sw e dependencias externas
+
+LW R1, 0(R2)      # R1 = Mem[R2]
+LW R3, 4(R2)      # R3 = Mem[R2+4]
+ADD R4, R1, R3    # R4 = R1 + R3 (depende dos loads)
+MUL R5, R4, R1    # R5 = R4 * R1 (depende de R4 e R1)
+SUB R6, R5, R3    # R6 = R5 - R3 (depende de R5 e R3)
+SW R6, 8(R2)      # Mem[R2+8] = R6 (depende de R6)
+
+# Fim do programa 

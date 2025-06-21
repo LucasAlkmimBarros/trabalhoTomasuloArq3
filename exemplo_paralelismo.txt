@@ -1,0 +1,4 @@
+# Exemplo: Paralelismo entre LW e MUL
+LW R1, 0(R2)        # Load pode ser executado em paralelo com MUL
+MUL R3, R4, R5      # MUL usa unidade funcional diferente do LW
+ADD R6, R1, R3      # Depende de ambos, só pode executar após os dois terminarem 

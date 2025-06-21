@@ -1,0 +1,4 @@
+# Exemplo: WAW entre ADD e MUL
+ADD R1, R2, R3      # R1 = R2 + R3
+MUL R1, R4, R5      # WAW: MUL também escreve em R1, pode sobrescrever antes do commit do ADD
+SUB R6, R1, R7      # R6 = R1 - R7 (pode pegar valor de ADD ou MUL, dependendo da ordem) 

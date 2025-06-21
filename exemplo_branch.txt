@@ -1,0 +1,6 @@
+# Exemplo: Especulação de desvio condicional (branch)
+LW R1, 0(R2)        # R1 = Mem[R2]
+BEQ R1, R0, FIM     # Se R1 == 0, desvia para FIM (branch especulativo)
+ADD R3, R1, R4      # Pode ser especulativamente emitido
+MUL R5, R3, R6      # Também pode ser especulativo
+FIM: SUB R7, R5, R8 # Instrução de destino do branch 

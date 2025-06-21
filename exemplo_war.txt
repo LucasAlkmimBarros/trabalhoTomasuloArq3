@@ -1,0 +1,4 @@
+# Exemplo: WAR entre ADD e SUB
+ADD R1, R2, R3      # R1 = R2 + R3
+SUB R2, R4, R5      # WAR: SUB quer escrever em R2, mas ADD ainda não leu R2
+MUL R6, R1, R2      # R6 = R1 * R2 

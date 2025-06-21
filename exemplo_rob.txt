@@ -1,0 +1,5 @@
+# Exemplo: Uso do ROB e commit fora de ordem
+LW R1, 0(R2)        # R1 = Mem[R2]
+LW R3, 4(R2)        # R3 = Mem[R2+4] (pode ser emitido antes do commit do anterior)
+ADD R4, R1, R3      # R4 = R1 + R3 (só pode executar após ambos os loads)
+SW R4, 8(R2)        # Mem[R2+8] = R4 (commit só após ADD) 
