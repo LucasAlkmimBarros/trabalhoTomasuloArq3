@@ -241,19 +241,45 @@ class ReorderBuffer:
         self.entries.clear()
 
 class BranchPredictor:
-    """Preditor de desvio simples (sempre não desvia)."""
-    def __init__(self):
+    """Preditor de desvio de 2 bits com saturação."""
+    def __init__(self, table_size=64):
         self.correct = 0
         self.total = 0
-
+        self.table_size = table_size
+        # Tabela de predição: cada entrada tem 2 bits (0-3)
+        # 0,1 = não desvia; 2,3 = desvia
+        # Estados: 00 (forte não), 01 (fraco não), 10 (fraco sim), 11 (forte sim)
+        self.prediction_table = [1] * table_size  # Inicializa com "fraco não desvia"
+        
+    def _get_index(self, instr):
+        """Calcula índice na tabela baseado no endereço da instrução."""
+        # Usa hash simples do texto da instrução como proxy do endereço
+        return hash(instr.raw_text) % self.table_size
+    
     def predict(self, instr):
-        # Sempre não desvia (pode ser melhorado)
-        return False
-
+        """Prediz se o desvio será tomado baseado no histórico."""
+        index = self._get_index(instr)
+        state = self.prediction_table[index]
+        # Estados 0,1 = não desvia; Estados 2,3 = desvia
+        return state >= 2
+    
     def update(self, taken, predicted):
+        """Atualiza o preditor com o resultado real do desvio."""
         self.total += 1
         if taken == predicted:
             self.correct += 1
+    
+    def update_prediction_table(self, instr, taken):
+        """Atualiza a tabela de predição com saturação."""
+        index = self._get_index(instr)
+        state = self.prediction_table[index]
+        
+        if taken:
+            # Desvio foi tomado: move em direção a "desvia" (máximo 3)
+            self.prediction_table[index] = min(3, state + 1)
+        else:
+            # Desvio não foi tomado: move em direção a "não desvia" (mínimo 0)
+            self.prediction_table[index] = max(0, state - 1)
 
     def accuracy(self):
         if self.total == 0:

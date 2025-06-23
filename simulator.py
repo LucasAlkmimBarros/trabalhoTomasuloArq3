@@ -342,6 +342,7 @@ class TomasuloSimulator:
 
                 predicted = self.branch_predictor.predict(rs_done.instr)
                 self.branch_predictor.update(taken, predicted)
+                self.branch_predictor.update_prediction_table(rs_done.instr, taken)
                 target_addr = self.labels.get(rs_done.instr.target) if rs_done.instr.target else None
                 rob_entry.branch_outcome = (taken, target_addr)
                 rob_entry.mispredicted = (taken != predicted)
